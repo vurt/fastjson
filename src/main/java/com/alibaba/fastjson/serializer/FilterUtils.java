@@ -1,8 +1,45 @@
 package com.alibaba.fastjson.serializer;
 
+import java.lang.reflect.Type;
 import java.util.List;
 
+import com.alibaba.fastjson.parser.DefaultJSONParser;
+import com.alibaba.fastjson.parser.deserializer.ExtraProcessor;
+import com.alibaba.fastjson.parser.deserializer.ExtraTypeProvider;
+
 public class FilterUtils {
+    public static Type getExtratype(DefaultJSONParser parser, Object object, String key) {
+        List<ExtraTypeProvider> extraTypeProviders = parser.getExtraTypeProvidersDirect();
+        if (extraTypeProviders == null) {
+            return null;
+        }
+        
+        Type type = null;
+        for (ExtraTypeProvider extraProvider : extraTypeProviders) {
+            type = extraProvider.getExtraType(object, key);
+        }
+        return type;
+    }
+    
+    public static void processExtra(DefaultJSONParser parser, Object object, String key, Object value) {
+        List<ExtraProcessor> extraProcessors = parser.getExtraProcessorsDirect();
+        if (extraProcessors == null) {
+            return;
+        }
+        for (ExtraProcessor process : extraProcessors) {
+            process.processExtra(object, key, value);
+        }
+    }
+
+    public static char writeBefore(JSONSerializer serializer, Object object, char seperator) {
+        List<BeforeFilter> beforeFilters = serializer.getBeforeFilters();
+        if (beforeFilters != null) {
+            for (BeforeFilter beforeFilter : beforeFilters) {
+                seperator = beforeFilter.writeBefore(serializer, object, seperator);
+            }
+        }
+        return seperator;
+    }
 
     public static Object processValue(JSONSerializer serializer, Object object, String key, Object propertyValue) {
         List<ValueFilter> valueFilters = serializer.getValueFiltersDirect();
@@ -152,7 +189,7 @@ public class FilterUtils {
         if (propertyFilters == null) {
             return true;
         }
-        
+
         for (PropertyFilter propertyFilter : propertyFilters) {
             if (!propertyFilter.apply(object, key, propertyValue)) {
                 return false;

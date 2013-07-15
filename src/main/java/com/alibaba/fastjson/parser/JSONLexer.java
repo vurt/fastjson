@@ -404,23 +404,21 @@ public abstract class JSONLexer implements Closeable {
 
         char type = ' ';
 
-        if (max > 0) {
-            switch (charAt(max - 1)) {
-                case 'L':
-                    max--;
-                    type = 'L';
-                    break;
-                case 'S':
-                    max--;
-                    type = 'S';
-                    break;
-                case 'B':
-                    max--;
-                    type = 'B';
-                    break;
-                default:
-                    break;
-            }
+        switch (charAt(max - 1)) {
+            case 'L':
+                max--;
+                type = 'L';
+                break;
+            case 'S':
+                max--;
+                type = 'S';
+                break;
+            case 'B':
+                max--;
+                type = 'B';
+                break;
+            default:
+                break;
         }
 
         if (charAt(np) == '-') {
@@ -619,10 +617,10 @@ public abstract class JSONLexer implements Closeable {
         return scanSymbolUnQuoted(symbolTable);
     }
 
-//    public abstract String scanSymbol(final SymbolTable symbolTable, final char quote);
-    
+    // public abstract String scanSymbol(final SymbolTable symbolTable, final char quote);
+
     protected abstract void arrayCopy(int srcPos, char[] dest, int destPos, int length);
-    
+
     public final String scanSymbol(final SymbolTable symbolTable, final char quote) {
         int hash = 0;
 
@@ -656,45 +654,94 @@ public abstract class JSONLexer implements Closeable {
                     }
 
                     // text.getChars(np + 1, np + 1 + sp, sbuf, 0);
-//                    System.arraycopy(this.buf, np + 1, sbuf, 0, sp);
+                    // System.arraycopy(this.buf, np + 1, sbuf, 0, sp);
                     arrayCopy(np + 1, sbuf, 0, sp);
                 }
 
                 chLocal = charAt(++bp);
 
                 switch (chLocal) {
-                    case '"':
-                        hash = 31 * hash + (int) '"';
-                        putChar('"');
+                    case '0':
+                        hash = 31 * hash + (int) chLocal;
+                        putChar('\0');
                         break;
-                    case '\\':
-                        hash = 31 * hash + (int) '\\';
-                        putChar('\\');
+                    case '1':
+                        hash = 31 * hash + (int) chLocal;
+                        putChar('\1');
                         break;
-                    case '/':
-                        hash = 31 * hash + (int) '/';
-                        putChar('/');
+                    case '2':
+                        hash = 31 * hash + (int) chLocal;
+                        putChar('\2');
                         break;
-                    case 'b':
+                    case '3':
+                        hash = 31 * hash + (int) chLocal;
+                        putChar('\3');
+                        break;
+                    case '4':
+                        hash = 31 * hash + (int) chLocal;
+                        putChar('\4');
+                        break;
+                    case '5':
+                        hash = 31 * hash + (int) chLocal;
+                        putChar('\5');
+                        break;
+                    case '6':
+                        hash = 31 * hash + (int) chLocal;
+                        putChar('\6');
+                        break;
+                    case '7':
+                        hash = 31 * hash + (int) chLocal;
+                        putChar('\7');
+                        break;
+                    case 'b': // 8
                         hash = 31 * hash + (int) '\b';
                         putChar('\b');
                         break;
-                    case 'f':
+                    case 't': // 9
+                        hash = 31 * hash + (int) '\t';
+                        putChar('\t');
+                        break;
+                    case 'n': // 10
+                        hash = 31 * hash + (int) '\n';
+                        putChar('\n');
+                        break;
+                    case 'v': // 11
+                        hash = 31 * hash + (int) '\u000B';
+                        putChar('\u000B');
+                        break;
+                    case 'f': // 12
                     case 'F':
                         hash = 31 * hash + (int) '\f';
                         putChar('\f');
                         break;
-                    case 'n':
-                        hash = 31 * hash + (int) '\n';
-                        putChar('\n');
-                        break;
-                    case 'r':
+                    case 'r': // 13
                         hash = 31 * hash + (int) '\r';
                         putChar('\r');
                         break;
-                    case 't':
-                        hash = 31 * hash + (int) '\t';
-                        putChar('\t');
+                    case '"': // 34
+                        hash = 31 * hash + (int) '"';
+                        putChar('"');
+                        break;
+                    case '\'': // 39
+                        hash = 31 * hash + (int) '\'';
+                        putChar('\'');
+                        break;
+                    case '/': // 47
+                        hash = 31 * hash + (int) '/';
+                        putChar('/');
+                        break;
+                    case '\\': // 92
+                        hash = 31 * hash + (int) '\\';
+                        putChar('\\');
+                        break;
+                    case 'x':
+                        char x1 = ch = charAt(++bp);
+                        char x2 = ch = charAt(++bp);
+
+                        int x_val = digits[x1] * 16 + digits[x2];
+                        char x_char = (char) x_val;
+                        hash = 31 * hash + (int) x_char;
+                        putChar(x_char);
                         break;
                     case 'u':
                         char c1 = chLocal = charAt(++bp);
@@ -784,7 +831,7 @@ public abstract class JSONLexer implements Closeable {
         // return text.substring(np, np + sp).intern();
 
         return this.addSymbol(np, sp, hash, symbolTable);
-//        return symbolTable.addSymbol(buf, np, sp, hash);
+        // return symbolTable.addSymbol(buf, np, sp, hash);
     }
 
     protected abstract void copyTo(int offset, int count, char[] dest);
@@ -798,6 +845,10 @@ public abstract class JSONLexer implements Closeable {
 
             if (ch == '\"') {
                 break;
+            }
+
+            if (ch == EOI) {
+                throw new JSONException("unclosed string : " + ch);
             }
 
             if (ch == '\\') {
@@ -815,7 +866,7 @@ public abstract class JSONLexer implements Closeable {
                     }
 
                     copyTo(np + 1, sp, sbuf);
-//                    text.getChars(np + 1, np + 1 + sp, sbuf, 0);
+                    // text.getChars(np + 1, np + 1 + sp, sbuf, 0);
                     // System.arraycopy(buf, np + 1, sbuf, 0, sp);
                 }
 
@@ -874,7 +925,7 @@ public abstract class JSONLexer implements Closeable {
                     case '/': // 47
                         putChar('/');
                         break;
-                    case '\\':  // 92
+                    case '\\': // 92
                         putChar('\\');
                         break;
                     case 'x':
@@ -989,6 +1040,7 @@ public abstract class JSONLexer implements Closeable {
     }
 
     protected final static char[] typeFieldName = ("\"" + JSON.DEFAULT_TYPE_KEY + "\":\"").toCharArray();
+
     public final int scanType(String type) {
         matchStat = UNKOWN;
 
@@ -1149,7 +1201,7 @@ public abstract class JSONLexer implements Closeable {
         return strVal;
     }
 
-    public String scanFieldSymbol(char[] fieldName, final SymbolTable symbolTable) {
+    public final String scanFieldSymbol(char[] fieldName, final SymbolTable symbolTable) {
         matchStat = UNKOWN;
 
         if (!charArrayCompare(fieldName)) {
@@ -1224,10 +1276,6 @@ public abstract class JSONLexer implements Closeable {
         }
 
         return strVal;
-    }
-
-    public ArrayList<String> scanFieldStringArray(char[] fieldName) {
-        return (ArrayList<String>) scanFieldStringArray(fieldName, null);
     }
 
     @SuppressWarnings("unchecked")
@@ -2002,7 +2050,7 @@ public abstract class JSONLexer implements Closeable {
                         sbuf = newsbuf;
                     }
 
-                    //text.getChars(offset, offset + count, dest, 0);
+                    // text.getChars(offset, offset + count, dest, 0);
                     this.copyTo(np + 1, sp, sbuf);
                     // System.arraycopy(buf, np + 1, sbuf, 0, sp);
                 }
@@ -2209,6 +2257,7 @@ public abstract class JSONLexer implements Closeable {
             }
 
             if (ch == 'D' || ch == 'F') {
+                sp++;
                 next();
             }
 

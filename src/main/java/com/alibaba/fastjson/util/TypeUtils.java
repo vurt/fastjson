@@ -47,6 +47,7 @@ import com.alibaba.fastjson.JSONException;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.annotation.JSONField;
 import com.alibaba.fastjson.annotation.JSONType;
+import com.alibaba.fastjson.parser.JSONScanner;
 import com.alibaba.fastjson.parser.ParserConfig;
 import com.alibaba.fastjson.parser.deserializer.FieldDeserializer;
 
@@ -361,7 +362,22 @@ public class TypeUtils {
                 return null;
             }
 
-            return Long.parseLong(strVal);
+            try {
+                return Long.parseLong(strVal);
+            } catch (NumberFormatException ex) {
+                //
+            }
+
+            JSONScanner dateParser = new JSONScanner(strVal);
+            Calendar calendar = null;
+            if (dateParser.scanISO8601DateIfMatch(false)) {
+                calendar = dateParser.getCalendar();
+            }
+            dateParser.close();
+
+            if (calendar != null) {
+                return calendar.getTimeInMillis();
+            }
         }
 
         throw new JSONException("can not cast to long, value : " + value);
@@ -457,6 +473,11 @@ public class TypeUtils {
 
         if (obj instanceof Map) {
             if (clazz == Map.class) {
+                return (T) obj;
+            }
+            
+            Map map = (Map) obj;
+            if (clazz == Object.class && !map.containsKey(JSON.DEFAULT_TYPE_KEY)) {
                 return (T) obj;
             }
 
@@ -731,13 +752,13 @@ public class TypeUtils {
                 return (T) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
                                                   new Class<?>[] { clazz }, object);
             }
-            
+
             if (mapping == null) {
                 mapping = ParserConfig.getGlobalInstance();
             }
 
             Map<String, FieldDeserializer> setters = mapping.getFieldDeserializers(clazz);
-            
+
             Constructor<T> constructor = clazz.getDeclaredConstructor();
             if (!constructor.isAccessible()) {
                 constructor.setAccessible(true);
@@ -921,11 +942,22 @@ public class TypeUtils {
                     continue;
                 }
 
-                if (!Character.isUpperCase(methodName.charAt(3))) {
+                char c3 = methodName.charAt(3);
+
+                String propertyName;
+                if (Character.isUpperCase(c3)) {
+                    if (methodName.length() > 4 && Character.isUpperCase(methodName.charAt(4))) {
+                        propertyName = methodName.substring(3);
+                    } else {
+                        propertyName = Character.toLowerCase(methodName.charAt(3)) + methodName.substring(4);
+                    }
+                } else if (c3 == '_') {
+                    propertyName = methodName.substring(4);
+                } else if (c3 == 'f') {
+                    propertyName = methodName.substring(3);
+                } else {
                     continue;
                 }
-
-                String propertyName = Character.toLowerCase(methodName.charAt(3)) + methodName.substring(4);
 
                 boolean ignore = isJSONTypeIgnore(clazz, propertyName);
 
@@ -935,7 +967,7 @@ public class TypeUtils {
 
                 Field field = ParserConfig.getField(clazz, propertyName);
                 if (field == null) {
-                    field = ParserConfig.getField(clazz, methodName.substring(3));
+                    field = ParserConfig.getField(clazz, propertyName);
                 }
 
                 if (field != null) {
@@ -973,14 +1005,22 @@ public class TypeUtils {
                 if (methodName.length() < 3) {
                     continue;
                 }
+                
+                char c2 = methodName.charAt(2);
 
-                if (!Character.isUpperCase(methodName.charAt(2))) {
+                String propertyName;
+                if (Character.isUpperCase(c2)) {
+                    propertyName = Character.toLowerCase(methodName.charAt(2)) + methodName.substring(3);
+                } else if (c2 == '_') {
+                    propertyName = methodName.substring(3);
+                } else if (c2 == 'f') {
+                    propertyName = methodName.substring(2);
+                } else {
                     continue;
                 }
 
-                String propertyName = Character.toLowerCase(methodName.charAt(2)) + methodName.substring(3);
-
                 Field field = ParserConfig.getField(clazz, propertyName);
+                
                 if (field != null) {
                     JSONField fieldAnnotation = field.getAnnotation(JSONField.class);
 
@@ -1030,7 +1070,7 @@ public class TypeUtils {
                     propertyName = fieldAnnotation.name();
                 }
             }
-            
+
             if (aliasMap != null) {
                 propertyName = aliasMap.get(propertyName);
                 if (propertyName == null) {

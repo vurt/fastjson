@@ -9,6 +9,10 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.alibaba.fastjson.JSONException;
 import com.alibaba.fastjson.annotation.JSONCreator;
@@ -17,7 +21,6 @@ import com.alibaba.fastjson.annotation.JSONField;
 public class DeserializeBeanInfo {
 
     private final Class<?>        clazz;
-    private final Type            type;
     private Constructor<?>        defaultConstructor;
     private Constructor<?>        creatorConstructor;
     private Method                factoryMethod;
@@ -27,7 +30,6 @@ public class DeserializeBeanInfo {
     public DeserializeBeanInfo(Class<?> clazz){
         super();
         this.clazz = clazz;
-        this.type = clazz;
     }
 
     public Constructor<?> getDefaultConstructor() {
@@ -58,24 +60,20 @@ public class DeserializeBeanInfo {
         return clazz;
     }
 
-    public Type getType() {
-        return type;
-    }
-
     public List<FieldInfo> getFieldList() {
         return fieldList;
     }
-    
+
     public FieldInfo getField(String propertyName) {
         for (FieldInfo item : this.fieldList) {
             if (item.getName().equals(propertyName)) {
                 return item;
             }
         }
-        
+
         return null;
     }
-    
+
     public boolean add(FieldInfo field) {
         for (FieldInfo item : this.fieldList) {
             if (item.getName().equals(field.getName())) {
@@ -83,12 +81,8 @@ public class DeserializeBeanInfo {
             }
         }
         fieldList.add(field);
-        
+
         return true;
-    }
-    
-    public static DeserializeBeanInfo computeSetters(Class<?> clazz) {
-        return computeSetters(clazz, clazz);
     }
 
     public static DeserializeBeanInfo computeSetters(Class<?> clazz, Type type) {
@@ -120,11 +114,7 @@ public class DeserializeBeanInfo {
                     Class<?> fieldClass = creatorConstructor.getParameterTypes()[i];
                     Type fieldType = creatorConstructor.getGenericParameterTypes()[i];
                     Field field = getField(clazz, fieldAnnotation.name());
-                    if (field != null) {
-                        field.setAccessible(true);
-                    }
-                    FieldInfo fieldInfo = new FieldInfo(fieldAnnotation.name(), clazz, fieldClass, fieldType, null,
-                                                        field);
+                    FieldInfo fieldInfo = new FieldInfo(fieldAnnotation.name(), clazz, fieldClass, fieldType, field);
                     beanInfo.add(fieldInfo);
                 }
                 return beanInfo;
@@ -151,16 +141,12 @@ public class DeserializeBeanInfo {
                     Class<?> fieldClass = factoryMethod.getParameterTypes()[i];
                     Type fieldType = factoryMethod.getGenericParameterTypes()[i];
                     Field field = getField(clazz, fieldAnnotation.name());
-                    if (field != null) {
-                        field.setAccessible(true);
-                    }
-                    FieldInfo fieldInfo = new FieldInfo(fieldAnnotation.name(), clazz, fieldClass, fieldType, null,
-                                                        field);
+                    FieldInfo fieldInfo = new FieldInfo(fieldAnnotation.name(), clazz, fieldClass, fieldType, field);
                     beanInfo.add(fieldInfo);
                 }
                 return beanInfo;
             }
-            
+
             throw new JSONException("default constructor not found. " + clazz);
         }
 
@@ -184,7 +170,7 @@ public class DeserializeBeanInfo {
             }
 
             JSONField annotation = method.getAnnotation(JSONField.class);
-            
+
             if (annotation == null) {
                 annotation = TypeUtils.getSupperMethodAnnotation(clazz, method);
             }
@@ -202,25 +188,41 @@ public class DeserializeBeanInfo {
                 }
             }
 
-            if (methodName.startsWith("set") && Character.isUpperCase(methodName.charAt(3))) {
-                String propertyName = Character.toLowerCase(methodName.charAt(3)) + methodName.substring(4);
-
-                Field field = getField(clazz, propertyName);
-                if (field != null) {
-
-                    JSONField fieldAnnotation = field.getAnnotation(JSONField.class);
-
-                    if (fieldAnnotation != null && fieldAnnotation.name().length() != 0) {
-                        propertyName = fieldAnnotation.name();
-
-                        beanInfo.add(new FieldInfo(propertyName, method, field, clazz, type));
-                        continue;
-                    }
-                }
-
-                beanInfo.add(new FieldInfo(propertyName, method, null, clazz, type));
-                method.setAccessible(true);
+            if (!methodName.startsWith("set")) {
+                continue;
             }
+
+            char c3 = methodName.charAt(3);
+
+            String propertyName;
+            if (Character.isUpperCase(c3)) {
+                if (methodName.length() > 4 && Character.isUpperCase(methodName.charAt(4))) {
+                    propertyName = methodName.substring(3);
+                } else {
+                    propertyName = Character.toLowerCase(methodName.charAt(3)) + methodName.substring(4);
+                }
+            } else if (c3 == '_') {
+                propertyName = methodName.substring(4);
+            } else if (c3 == 'f') {
+                propertyName = methodName.substring(3);
+            } else {
+                continue;
+            }
+            Field field = getField(clazz, propertyName);
+            if (field != null) {
+
+                JSONField fieldAnnotation = field.getAnnotation(JSONField.class);
+
+                if (fieldAnnotation != null && fieldAnnotation.name().length() != 0) {
+                    propertyName = fieldAnnotation.name();
+
+                    beanInfo.add(new FieldInfo(propertyName, method, field, clazz, type));
+                    continue;
+                }
+            }
+
+            beanInfo.add(new FieldInfo(propertyName, method, null, clazz, type));
+            method.setAccessible(true);
         }
 
         for (Field field : clazz.getFields()) {
@@ -228,10 +230,6 @@ public class DeserializeBeanInfo {
                 continue;
             }
 
-            if (!Modifier.isPublic(field.getModifiers())) {
-                continue;
-            }
-            
             boolean contains = false;
             for (FieldInfo item : beanInfo.getFieldList()) {
                 if (item.getName().equals(field.getName())) {
@@ -239,13 +237,13 @@ public class DeserializeBeanInfo {
                     continue;
                 }
             }
-            
+
             if (contains) {
                 continue;
             }
 
             String propertyName = field.getName();
-            
+
             JSONField fieldAnnotation = field.getAnnotation(JSONField.class);
 
             if (fieldAnnotation != null && fieldAnnotation.name().length() != 0) {
@@ -253,7 +251,7 @@ public class DeserializeBeanInfo {
             }
             beanInfo.add(new FieldInfo(propertyName, null, field, clazz, type));
         }
-        
+
         for (Method method : clazz.getMethods()) {
             String methodName = method.getName();
             if (methodName.length() < 4) {
@@ -263,25 +261,28 @@ public class DeserializeBeanInfo {
             if (Modifier.isStatic(method.getModifiers())) {
                 continue;
             }
-            
+
             if (methodName.startsWith("get") && Character.isUpperCase(methodName.charAt(3))) {
                 if (method.getParameterTypes().length != 0) {
                     continue;
                 }
-                
-                if (!Collection.class.isAssignableFrom(method.getReturnType())) {
-                    continue;
+
+                if (Collection.class.isAssignableFrom(method.getReturnType()) //
+                    || Map.class.isAssignableFrom(method.getReturnType()) //
+                    || AtomicBoolean.class == method.getReturnType() //
+                    || AtomicInteger.class == method.getReturnType() //
+                    || AtomicLong.class == method.getReturnType() //
+                ) {
+                    String propertyName = Character.toLowerCase(methodName.charAt(3)) + methodName.substring(4);
+
+                    FieldInfo fieldInfo = beanInfo.getField(propertyName);
+                    if (fieldInfo != null) {
+                        continue;
+                    }
+
+                    beanInfo.add(new FieldInfo(propertyName, method, null, clazz, type));
+                    method.setAccessible(true);
                 }
-                
-                String propertyName = Character.toLowerCase(methodName.charAt(3)) + methodName.substring(4);
-                
-                FieldInfo fieldInfo = beanInfo.getField(propertyName);
-                if (fieldInfo != null) {
-                    continue;
-                }
-                
-                beanInfo.add(new FieldInfo(propertyName, method, null, clazz, type));
-                method.setAccessible(true);
             }
         }
 
@@ -308,18 +309,19 @@ public class DeserializeBeanInfo {
                 break;
             }
         }
-        
+
         if (defaultConstructor == null) {
             if (clazz.isMemberClass() && !Modifier.isStatic(clazz.getModifiers())) {
                 for (Constructor<?> constructor : clazz.getDeclaredConstructors()) {
-                    if (constructor.getParameterTypes().length == 1 && constructor.getParameterTypes()[0].equals(clazz.getDeclaringClass())) {
+                    if (constructor.getParameterTypes().length == 1
+                        && constructor.getParameterTypes()[0].equals(clazz.getDeclaringClass())) {
                         defaultConstructor = constructor;
                         break;
                     }
                 }
             }
         }
-        
+
         return defaultConstructor;
     }
 
