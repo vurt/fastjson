@@ -75,7 +75,7 @@ public class ObjectFieldSerializer extends FieldSerializer {
         if (fieldSerializer == null) {
 
             if (propertyValue == null) {
-                runtimeFieldClass = this.getMethod().getReturnType();
+                runtimeFieldClass = this.fieldInfo.getFieldClass();
             } else {
                 runtimeFieldClass = propertyValue.getClass();
             }
@@ -114,7 +114,7 @@ public class ObjectFieldSerializer extends FieldSerializer {
         }
 
         ObjectSerializer valueSerializer = serializer.getObjectWriter(valueClass);
-        valueSerializer.write(serializer, propertyValue, fieldInfo.getName(), null);
+        valueSerializer.write(serializer, propertyValue, fieldInfo.getName(), fieldInfo.getFieldType());
     }
 
 }

@@ -128,6 +128,11 @@ public class JavaBeanSerializer implements ObjectSerializer {
                     commaFlag = true;
                 }
             }
+            
+            char seperator = commaFlag ? ',':'\0';
+            
+            char newSeperator = FilterUtils.writeBefore(serializer, object, seperator);
+            commaFlag = newSeperator == ',';
 
             for (int i = 0; i < getters.length; ++i) {
                 FieldSerializer fieldSerializer = getters[i];
@@ -139,6 +144,10 @@ public class JavaBeanSerializer implements ObjectSerializer {
                             continue;
                         }
                     }
+                }
+                
+                if (!FilterUtils.applyName(serializer, object, fieldSerializer.getName())) {
+                    continue;
                 }
 
                 Object propertyValue = fieldSerializer.getPropertyValue(object);

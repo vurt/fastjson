@@ -19,6 +19,7 @@ import com.alibaba.fastjson.parser.JSONLexer;
 import com.alibaba.fastjson.parser.JSONToken;
 import com.alibaba.fastjson.parser.ParseContext;
 import com.alibaba.fastjson.parser.ParserConfig;
+import com.alibaba.fastjson.serializer.FilterUtils;
 import com.alibaba.fastjson.util.DeserializeBeanInfo;
 import com.alibaba.fastjson.util.FieldInfo;
 import com.alibaba.fastjson.util.TypeUtils;
@@ -30,15 +31,8 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
     private final List<FieldDeserializer>        fieldDeserializers   = new ArrayList<FieldDeserializer>();
 
     private final Class<?>                       clazz;
-    private final Type                           type;
 
     private DeserializeBeanInfo                  beanInfo;
-
-    public JavaBeanDeserializer(DeserializeBeanInfo beanInfo){
-        this.beanInfo = beanInfo;
-        this.clazz = beanInfo.getClazz();
-        this.type = beanInfo.getType();
-    }
 
     public JavaBeanDeserializer(ParserConfig config, Class<?> clazz){
         this(config, clazz, clazz);
@@ -46,7 +40,6 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
 
     public JavaBeanDeserializer(ParserConfig config, Class<?> clazz, Type type){
         this.clazz = clazz;
-        this.type = type;
 
         beanInfo = DeserializeBeanInfo.computeSetters(clazz, type);
 
@@ -61,10 +54,6 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
 
     public Class<?> getClazz() {
         return clazz;
-    }
-
-    public Type getType() {
-        return type;
     }
 
     private void addFieldDeserializer(ParserConfig mapping, Class<?> clazz, FieldInfo fieldInfo) {
@@ -340,12 +329,7 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
         }
 
         if (fieldDeserializer == null) {
-            if (!parser.isEnabled(Feature.IgnoreNotMatch)) {
-                throw new JSONException("setter not found, class " + clazz.getName() + ", property " + key);
-            }
-
-            lexer.nextTokenWithColon();
-            parser.parse(); // skip
+            parseExtra(parser, object, key);
 
             return false;
         }
@@ -355,6 +339,24 @@ public class JavaBeanDeserializer implements ObjectDeserializer {
         fieldDeserializer.parseField(parser, object, objectType, fieldValues);
 
         return true;
+    }
+
+    void parseExtra(DefaultJSONParser parser, Object object, String key) {
+        final JSONLexer lexer = parser.getLexer(); // xxx
+        if (!lexer.isEnabled(Feature.IgnoreNotMatch)) {
+            throw new JSONException("setter not found, class " + clazz.getName() + ", property " + key);
+        }
+
+        lexer.nextTokenWithColon();
+        Type type = FilterUtils.getExtratype(parser, object, key);
+        Object value;
+        if (type == null) {
+            value = parser.parse(); // skip
+        } else {
+            value = parser.parseObject(type);
+        }
+        
+        FilterUtils.processExtra(parser, object, key, value);
     }
 
     public int getFastMatchToken() {
